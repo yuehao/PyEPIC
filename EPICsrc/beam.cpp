@@ -540,8 +540,9 @@ void beam::LorentzTransform(const double& half_cross_angle, const int& forward) 
             double ds=x_[i]*sin_ang;
 
             y_[i]+= ds * py_[i]/ps;
-            z_[i] = z_[i]/cos_ang + ds * h / ps;
+            z_[i] = z_[i]/cos_ang - ds * h / ps;
             x_[i] += tan_ang * z_[i] + ds * px_[i] /ps;
+
 
         }
     }
