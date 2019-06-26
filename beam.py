@@ -424,8 +424,9 @@ class Beam(object):
 
         ds = self._x * sin_ang
         self._y += ds * self._py / ps_list
-        self._ct = self._ct / cos_ang - ds * h_list / ps_list
+
         self._x += tan_ang * self._ct + ds * self._px / ps_list
+        self._ct = self._ct / cos_ang - ds * h_list / ps_list
 
 
     def inv_lorentz_boost(self):
