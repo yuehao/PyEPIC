@@ -220,32 +220,36 @@ void beam::set_longitudinal_slices() {
         slice_xc[i]/=slice_npar[i];
         slice_yc[i]/=slice_npar[i];
     }
+
+
     #pragma omp parallel for
-    for (unsigned long i=start_Ind;i<end_Ind;i++){
-
-		double x2, y2;
-
+    for (unsigned long i=start_Ind;i<end_Ind;i++)
         if (inslice[i]>=0) {
-#pragma omp atomic
-            x2 = (x_[i] - slice_xc[inslice[i]]) * (x_[i] - slice_xc[inslice[i]]) * partition[i];
-#pragma omp atomic
-            y2 = (y_[i] - slice_yc[inslice[i]]) * (y_[i] - slice_yc[inslice[i]]) * partition[i];
-#pragma omp atomic
-            slice_xrms[inslice[i]] += x2;
-#pragma omp atomic
-            slice_yrms[inslice[i]] += y2;
+
+            double x2, y2;
+            #pragma omp atomic read
+            x2 = (x_[i] - slice_xc[inslice[i]]) * (x_[i] - slice_xc[inslice[i]]);
+            #pragma omp atomic read
+            y2 = (y_[i] - slice_yc[inslice[i]]) * (y_[i] - slice_yc[inslice[i]]);
+            #pragma omp atomic
+            slice_xrms[inslice[i]] += x2 * partition[i];
+            #pragma omp atomic
+            slice_yrms[inslice[i]] += y2 * partition[i];
         }
-		if (adslice[i]>= 0) {
-#pragma omp atomic
-			x2 = (x_[i] - slice_xc[adslice[i]]) * (x_[i] - slice_xc[adslice[i]]) * (1 - partition[i]);
-#pragma omp atomic
-			y2 = (y_[i] - slice_yc[adslice[i]]) * (y_[i] - slice_yc[adslice[i]]) * (1 - partition[i]);
-#pragma omp atomic
-			slice_xrms[adslice[i]] += x2;
-#pragma omp atomic
-			slice_yrms[adslice[i]] += y2;
-		}
-	}
+
+        if (adslice[i] >= 0) {
+            #pragma omp atomic read
+            x2 = (x_[i] - slice_xc[adslice[i]]) * (x_[i] - slice_xc[adslice[i]])
+            #pragma omp atomic read
+            y2 = (y_[i] - slice_yc[adslice[i]]) * (y_[i] - slice_yc[adslice[i]])
+            #pragma omp atomic
+            slice_xrms[adslice[i]] += x2 * (1.0 - partition[i]);
+            #pragma omp atomic
+            slice_yrms[adslice[i]] += y2 * (1.0 - partition[i]);
+
+
+
+        }
 
     MPI_Allreduce(MPI_IN_PLACE,&slice_xrms,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE,&slice_yrms,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
@@ -540,6 +544,7 @@ void beam::LorentzTransform(const double& half_cross_angle, const int& forward) 
             double ds=x_[i]*sin_ang;
 
             y_[i]+= ds * py_[i]/ps;
+
             x_[i] += tan_ang * z_[i] + ds * px_[i] /ps;
             z_[i] = z_[i]/cos_ang - ds * h / ps;
 
