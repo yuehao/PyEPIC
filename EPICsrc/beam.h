@@ -12,6 +12,14 @@
 
 
 class beam {
+public:
+  friend double beambeam_pass(beam &, beam &);
+  friend double beambeam_slicepass(beam &, unsigned, std::vector<std::vector<double>> &, beam &, unsigned, std::vector<std::vector<double>> &);
+  void print_pdf(const std::string &, const double &) const;
+  void print_coord(const std::string &, int=-1) const;
+  void set_longitudinal_slices2();
+private:
+  std::vector<std::vector<unsigned long>> par_inslice;
 private:
     //Should be in dimension of n_macro
     std::vector<double> x_;
