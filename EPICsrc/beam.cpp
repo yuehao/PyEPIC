@@ -209,9 +209,12 @@ void beam::set_longitudinal_slices() {
                 slice_yc[adslice[i]] += y_[i] * (1.0 - partition[i]);
             }
     }
-    MPI_Allreduce(MPI_IN_PLACE,&slice_npar,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE,&slice_xc,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE,&slice_yc,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    //MPI_Allreduce(MPI_IN_PLACE,&slice_npar,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,slice_npar.data(),zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    //MPI_Allreduce(MPI_IN_PLACE,&slice_xc,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,slice_xc.data(),zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    //MPI_Allreduce(MPI_IN_PLACE,&slice_yc,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,slice_yc.data(),zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 
     
 
@@ -247,8 +250,10 @@ void beam::set_longitudinal_slices() {
 		}
 	}
 
-    MPI_Allreduce(MPI_IN_PLACE,&slice_xrms,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE,&slice_yrms,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    //MPI_Allreduce(MPI_IN_PLACE,&slice_xrms,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,slice_xrms.data(),zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    //MPI_Allreduce(MPI_IN_PLACE,&slice_yrms,zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE,slice_yrms.data(),zslice,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     #pragma omp parallel for
     for (int i=0;i<zslice;i++) if (slice_npar[i]>0){
         slice_xrms[i]/=slice_npar[i];
