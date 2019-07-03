@@ -184,6 +184,12 @@ void beam::print_coord(const std::string &file, int slice) const{
 }
 /************************************************************************************************/
 void beam::set_longitudinal_slices2() {
+  slice_center.clear();
+  slice_npar.clear();
+  slice_xc.clear();
+  slice_yc.clear();
+  slice_xrms.clear();
+  slice_yrms.clear();
     slice_center.resize(zslice,0);
     slice_npar.resize(zslice,0);
     slice_xc.resize(zslice,0);
@@ -247,7 +253,7 @@ void beam::set_longitudinal_slices2() {
             partition[i]=1.0-zext*zext*2.0/marco_size/marco_size;
             #pragma omp atomic
             slice_npar[inslice[i]]+=partition[i];
-            #pragma omp atomic
+            //#pragma omp atomic
             //slice_xc[inslice[i]]+=x_[i]*partition[i];
             //#pragma omp atomic
             //slice_yc[inslice[i]]+=y_[i]*partition[i];
@@ -270,8 +276,10 @@ void beam::set_longitudinal_slices2() {
 	  }
 	}
 
+	par_inslice.clear();
 	par_inslice.resize(zslice);
 	for(unsigned i=0;i<zslice;++i){
+	  par_inslice[i].clear();
 	  par_inslice[i].resize(par_inslice_set[i].size());
 	  std::copy(par_inslice_set[i].begin(),par_inslice_set[i].end(),par_inslice[i].begin());
 	  //for(unsigned j=0;j<par_inslice_set[i].size();++j)
@@ -648,12 +656,14 @@ beam& beam::OneTurn2(const COneTurnMap& mapx,const COneTurnMap& mapy,const Crf& 
 				  delta_[i]+=rad.deltaE*rad.excitation_strength_z*nord(rdgen);
 				}
             }
+			/*
             if (x_[i] * x_[i] + y_[i] * y_[i] > aperture * aperture)  {
                 totalloss++;
                 inslice[i] = -1;
                 std::cout << "Beam loss due to aperture" << std::endl;
             
             }
+			*/
         
         }
 
