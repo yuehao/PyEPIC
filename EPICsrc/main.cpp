@@ -12,19 +12,28 @@ int main(int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   double betx=0.26,bety=0.13;
-  double alfx=0.0,alfy=0.0;
+  double alfx=-1.0,alfy=1.0;
   double ex=3.41e-9,ey=3.41e-9;
-  double sigx=sqrt(betx*ex), sigy=sqrt(bety*ey), sigz=0.16, sigd=1.0e-4;
   double E0=15e9, E1=275e9, m0=0.511e6, m1=938.0e6;
-  COneTurnMap mapx(betx, alfx, 0.675,0);
-  COneTurnMap mapy(bety, alfy, 0.685,0);
-  Crf rf(0,-1,0,0,0);
+  double nux=0.675, nuy=0.685, nuz=0.0043;
+  double chromx=0.0, chromy=0.0;
+  double N0=3.0e11, N1=3.0e11;
+
+  COneTurnMap mapx(betx, alfx, nux, chromx);
+  COneTurnMap mapy(bety, alfy, nuy, chromy);
+  Crf rf(nuz);
+  lattice_radiation_property rad;
+  rad.SetEmit(ex, ey);
+  rad.SetDamping(500, 500, 500);
+  rad.SetLongitudinal(0.16, 1.0e-4);
+  rad.SetTransverse(mapx, mapy);
 
   std::random_device seed;
   std::mt19937 mt(seed());
 
+  /*
   beam b0,b1;
-  b0.SetN(3.0e11, 100000);b1.SetN(3.0e11, 100000);
+  b0.SetN(N0, 100000);b1.SetN(N1, 100000);
   b0.SetSize(sigx,sigy,sigz,sigd);b1.SetSize(sigx,sigy,sigz,sigd);
   b0.SetEmit(ex,ey);b1.SetEmit(ex,ey);
   b0.SetEnergy(E0,m0,-1);b1.SetEnergy(E1,m1,1);
@@ -44,7 +53,22 @@ int main(int argc, char *argv[]) {
   }
 
   b0.print_coord("hello");
+  */
 
+
+  beam b0;
+  b0.SetN(N0,100000);
+  b0.SetSize(10*rad.xsize,5*rad.ysize,3*rad.zsize,6*rad.deltaE);
+  b0.Ini6D(mapx,mapy,rf,mt);
+  int turns=11;
+  if(argc>1)
+	turns=std::stoi(argv[1]); 
+  while(--turns>0){
+	b0.OneTurn2(mapx,mapy,rf,rad,mt);
+	if(rank==0)
+	  std::cout<<turns<<std::endl;
+  }
+  b0.print_coord("hello");
 
 
   MPI_Finalize();

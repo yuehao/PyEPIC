@@ -27,13 +27,16 @@ public:
 class Crf{
 public:
     double gammat;
-    double voltage;
+	//07/02/2019:provide a inclass initializer for voltage
+    double voltage=-1.0;
     double phase;
     double harm;
     double freq0;
     int keep_z;
     double tune_syn;
     Crf(){}
+	//07/02/2019:one parater constructor
+	Crf(double nus):tune_syn(nus){}
     Crf(const double& gmt, const double& v, const double& ph, const double& h, const double& freq, const int& keep_z=1):
             gammat(gmt),voltage(v), phase(ph), harm(h), freq0(freq),keep_z(keep_z), tune_syn(0.0){};
     void force_tune(double nus) {tune_syn=nus;}
@@ -68,6 +71,22 @@ public:
     void set_error(const double& voltage_jitter, const double& phase_jitter);
     void pass(double& x, double& px, double& z, double& de) const;
     //std::vector<double> IP_deviation(std::vector<double>& zpos, const double& half_crossing_angle) const;
+};
+
+//07/02/2019
+struct lattice_radiation_property{
+  lattice_radiation_property &SetEmit(double, double);
+  lattice_radiation_property &SetDamping(double, double, double);
+  lattice_radiation_property &SetLongitudinal(double, double);
+  lattice_radiation_property &SetTransverse(const COneTurnMap&, const COneTurnMap&); //Must be called after "SetEmit"
+
+  double ex=-1.0, ey=-1.0;
+  double zsize=-1.0, deltaE=-1.0;
+  double damping_turns_x=-1.0, damping_turns_y=-1.0, damping_turns_z=-1.0; // 1/e damping time in unit of turns
+  double damping_strength_x, damping_strength_y, damping_strength_z;
+  double excitation_strength_x, excitation_strength_y, excitation_strength_z;
+  double xsize=-1.0, ysize=-1.0, pxsize=-1.0, pysize=-1.0;
+  bool is_damping=false, is_excitation=false;
 };
 
 

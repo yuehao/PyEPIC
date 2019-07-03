@@ -8,6 +8,7 @@
 #include<vector>
 #include<algorithm>
 #include<set>
+#include<random>
 
 using std::vector;
 using std::set;
@@ -571,3 +572,94 @@ double beambeam_slicepass(beam &beamL, unsigned sL, vector<vector<double>> &coor
   
 }
 
+/************************************************************************************************/
+//07/02/2019 add radiation damping and quantum excitation 
+beam& beam::OneTurn2(const COneTurnMap& mapx,const COneTurnMap& mapy,const Crf& rfz, const lattice_radiation_property &rad, std::mt19937 &rdgen){
+    int myid=0,process_count=1;
+    unsigned long start_Ind, end_Ind;
+
+    int totalloss=0;
+    MPI_Comm_size (MPI_COMM_WORLD, &process_count);
+    MPI_Comm_rank (MPI_COMM_WORLD, &myid );
+    double ita0=0,beta0=0,ita1=0,rftemp1=0,rftemp2=0;
+    COneTurnMap mapz;
+    if (rfz.voltage>0){
+        beta0=sqrt(1.0-1.0/gamma_e/gamma_e);
+        ita0=1.0/pow(rfz.gammat,2.0)-1.0/gamma_e/gamma_e;
+        ita1=2.0*beta0*beta0/gamma_e/gamma_e;
+        rftemp1=std::abs(this->charge)*rfz.voltage/beta0/beta0/energy;
+        rftemp2=-rfz.harm*2*M_PI*rfz.freq0/beta0/clight;
+    }
+    else{
+        double tunez=rfz.tune_syn;
+        mapz=COneTurnMap(this->zsize/this->deltaE, 0, tunez, 0);
+    }
+
+	std::normal_distribution<double> nord;
+
+    start_Ind=myid*n_macro/process_count;
+    end_Ind=(myid+1)*n_macro/process_count;
+
+    #pragma omp parallel for  reduction(+:totalloss)
+    for (unsigned long i=start_Ind;i<end_Ind;i++) if (inslice[i]>=0) {
+            mapx.Pass(x_[i], px_[i], delta_[i]);
+            mapy.Pass(y_[i], py_[i], delta_[i]);
+			if(rad.is_damping){
+			  x_[i]*=rad.damping_strength_x;
+			  px_[i]*=rad.damping_strength_x;
+			  y_[i]*=rad.damping_strength_y;
+			  py_[i]*=rad.damping_strength_y;
+
+			}
+			if(rad.is_excitation){
+			  double rx=nord(rdgen), rpx=nord(rdgen), ry=nord(rdgen), rpy=nord(rdgen);
+			  x_[i]+=rad.xsize*rad.excitation_strength_x*rx;
+			  px_[i]+=rad.xsize*rad.excitation_strength_x*(rpx-mapx.alpha*rx)/mapx.beta;
+			  y_[i]+=rad.ysize*rad.excitation_strength_y*ry;
+			  py_[i]+=rad.ysize*rad.excitation_strength_y*(rpy-mapy.alpha*ry)/mapy.beta;
+			}
+            if (rfz.voltage>0) {
+                delta_[i] += rftemp1 * sin(z_[i] * rftemp2 + M_PI);
+                z_[i] += 2.0 * M_PI * rfz.harm * (ita0 + ita1 * delta_[i]) * delta_[i] / rftemp2;
+				if(rad.is_damping){
+				  z_[i]*=rad.damping_strength_z;
+				  delta_[i]*=rad.damping_strength_z;
+				}
+				if(rad.is_excitation){
+				  z_[i]+=rad.zsize*rad.excitation_strength_z*nord(rdgen);
+				  delta_[i]+=rad.deltaE*rad.excitation_strength_z*nord(rdgen);
+				}
+
+                if ((delta_[i] * delta_[i] > rftemp1 * (1 - cos(rftemp2 * z_[i] + M_PI)) / M_PI / rfz.harm / ita0 ||
+                        std::abs(rftemp2 * z_[i])) > M_PI){
+                    totalloss++;
+                    inslice[i] = -1;
+                    std::cout << "Beam loss due to rf bucket" << std::endl;
+                }
+            }
+            else{
+                mapz.Pass(z_[i], delta_[i], 0.0);
+				if(rad.is_damping){
+				  z_[i]*=rad.damping_strength_z;
+				  delta_[i]*=rad.damping_strength_z;
+				}
+				if(rad.is_excitation){
+				  z_[i]+=rad.zsize*rad.excitation_strength_z*nord(rdgen);
+				  delta_[i]+=rad.deltaE*rad.excitation_strength_z*nord(rdgen);
+				}
+            }
+            if (x_[i] * x_[i] + y_[i] * y_[i] > aperture * aperture)  {
+                totalloss++;
+                inslice[i] = -1;
+                std::cout << "Beam loss due to aperture" << std::endl;
+            
+            }
+        
+        }
+
+
+    MPI_Allreduce(MPI_IN_PLACE,&totalloss,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
+    n_live=n_live-totalloss;
+
+	return *this;
+}

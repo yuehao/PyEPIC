@@ -6,6 +6,7 @@
 #include "mathfunc.h"
 #include <cmath>
 #include <iostream>
+#include <cassert>
 
 void COneTurnMap::SetMatrix(const double &m11, const double &m12, const double &m21, const double &m22) {
     this->m11=m11;
@@ -132,6 +133,40 @@ void CCrabCavity::pass(double &x, double& px, double& z, double &de) const {
 }
 
 
+/*************************************************************************************************************/
+lattice_radiation_property & lattice_radiation_property::SetEmit(double ex0, double ey0){
+  ex=ex0;ey=ey0;
+  return *this;
+}
+lattice_radiation_property & lattice_radiation_property::SetDamping(double nx, double ny, double nz){
+  assert(nx>0.0 && ny>0.0 && nz>0.0);
 
+  damping_turns_x=nx;
+  damping_turns_y=ny;
+  damping_turns_z=nz;
+  damping_strength_x=exp(-1.0/damping_turns_x);
+  damping_strength_y=exp(-1.0/damping_turns_y);
+  damping_strength_z=exp(-1.0/damping_turns_z);
+  excitation_strength_x=sqrt(1.0-damping_strength_x*damping_strength_x);
+  excitation_strength_y=sqrt(1.0-damping_strength_y*damping_strength_y);
+  excitation_strength_z=sqrt(1.0-damping_strength_z*damping_strength_z);
+
+  is_damping=true;
+  is_excitation=true;
+  return *this;
+}
+lattice_radiation_property & lattice_radiation_property::SetLongitudinal(double z, double delta){
+  zsize=z;
+  deltaE=delta;
+  return *this;
+}
+lattice_radiation_property & lattice_radiation_property::SetTransverse(const COneTurnMap &mapx, const COneTurnMap &mapy){
+  assert(ex>0.0 && ey>0.0);
+  xsize=sqrt(mapx.beta*ex);
+  pxsize=sqrt(mapx.gamma*ex);
+  ysize=sqrt(mapy.beta*ey);
+  pysize=sqrt(mapy.gamma*ey);
+  return *this;
+}
 
 
