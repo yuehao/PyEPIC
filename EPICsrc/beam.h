@@ -19,6 +19,7 @@ public:
   void print_coord(const std::string &, int=-1) const;
   void set_longitudinal_slices2();
   beam& OneTurn2(const COneTurnMap&,const COneTurnMap&,const Crf&, const lattice_radiation_property&, std::mt19937 &rdgen);
+  std::vector<double> CalMoments();
 private:
   std::vector<std::vector<unsigned long>> par_inslice;
 private:
