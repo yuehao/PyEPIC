@@ -76,7 +76,18 @@ def beambeam_Gaussian_grid(sigmax, sigmay, rangex=10.0, rangey=10.0, epsilon=1e-
     #    output.save(sdds_file)
     return xlist,ylist,ex,ey
 
+def Gaussian_beam_beam(sigmax, sigmay, xlist, ylist):
+    sigxy=np.sqrt(2*(sigmax*sigmax-sigmay*sigmay))
+    
+    
+    z1=(xlist+1j*ylist)/sigxy
+    z2=(xlist*sigmay/sigmax+1j*ylist*sigmax/sigmay)/sigxy
+    expterm=np.exp(-xlist*xlist/sigmax/sigmax/2-ylist*ylist/sigmay/sigmay/2)
+    result=spefunc.wofz(z1)-expterm*spefunc.wofz(z2)
+    nEy=result.real
+    nEx=result.imag
 
+    return nEx,nEy
 
 
 def flat_Gaussian_beam_beam(sigmax, sigmay, xlist, ylist, order=1):

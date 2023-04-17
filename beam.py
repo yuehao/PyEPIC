@@ -5,6 +5,7 @@ import scipy.optimize as optimize
 from . import listfunc as lf
 from . import element
 import copy
+import multiprocessing as mp
 
 
 class BeamParameter(object):
@@ -43,8 +44,8 @@ class BeamParameter(object):
         self.rf_voltage = 0
         self.rf_harm = 1
         self.rf_freq = 28.15e6
-        self.rf_phase = np.pi/2.0
-        self.rf_compaction = 1/23.57/23.57
+        self.rf_phase = 0
+        self.momentum_compaction = 1/23.57/23.57
 
         #self.crossing_angle=5e-3   # half of the crossing angle
         self.crab_cavity_freq=197e6
@@ -142,6 +143,20 @@ class BeamParameter(object):
         self.IPmap[5, 4] = -gamma * np.sin(phase)
         self.IPmap[5, 5] = np.cos(phase) - alpha * np.sin(phase)
 
+        if self.rf_voltage != 0:
+            self.rf_eta = self.momentum_compaction-1.0/self.gamma**2
+            etacosphi=self.rf_eta*np.cos(self.rf_phase)
+
+            if etacosphi>0:
+                self.rf_phase=np.pi-self.rf_phase
+                etacosphi*=-1
+
+            self.rf_unstable_phase = np.pi - self.rf_phase
+            tune = np.sqrt(-self.rf_voltage*self.rf_harm*etacosphi/2/np.pi/self.beta**2/self.energy)
+            ratio = self.rf_freq*2*np.pi/const.c*tune/np.abs(self.rf_eta)/self.rf_harm
+            self.tune[-1]=tune
+            self.rms_energy_spread=ratio*self.rms_beamsize[-1]
+
 
     def set_param(self, **param_dict):
         namelist = self.__dict__.keys()
@@ -164,7 +179,7 @@ class BeamParameter(object):
 
 
 class Beam(object):
-    def __init__(self):
+    def __init__(self, nproc=1):
         self.param = BeamParameter()
         self._x = np.empty(0)
         self._px = np.empty(0)
@@ -173,9 +188,29 @@ class Beam(object):
         self._ct = np.empty(0)
         self._dE = np.empty(0)
         self._ndim = 0
+        self.nproc=nproc
 
     def read_input(self, input_dict):
+        from multiprocessing.sharedctypes import RawArray
         self.param.set_param(**input_dict)
+
+        self.param.n_macro=(self.param.n_macro//self.nproc)*self.nproc
+        nmp = int(self.param.n_macro)
+
+        self._XRAW = RawArray('d', nmp)
+        self._PXRAW = RawArray('d', nmp)
+        self._YRAW = RawArray('d', nmp)
+        self._PYRAW = RawArray('d', nmp)
+        self._CTRAW = RawArray('d', nmp)
+        self._DERAW = RawArray('d', nmp)
+
+        self._x=np.frombuffer(self._XRAW)
+        self._px=np.frombuffer(self._PXRAW)
+        self._y = np.frombuffer(self._YRAW)
+        self._py = np.frombuffer(self._PYRAW)
+        self._ct = np.frombuffer(self._CTRAW)
+        self._dE = np.frombuffer(self._DERAW)
+
 
     def get_optics(self, loc):
         beta=self.param.beta_star+np.power(loc-self.param.s_star,2.0)/self.param.beta_star
@@ -222,14 +257,49 @@ class Beam(object):
 
     def one_turn_x(self):
         self._x, self._px=self.param.IPmap[0:2,0:2].dot(np.array([self._x, self._px]))
+    
+    def one_turn_x_chromatic(self, chrom):
+        dphi = self._dE*chrom*2*np.pi
+        beta = self.param.beta_IP[0]
+        alpha = self.param.alpha_IP[0]
+        gamma = self.param.gamma_IP[0]
+        cosdphi=np.cos(dphi)
+        sindphi=np.sin(dphi)
+        m11 = cosdphi + alpha * sindphi
+        m12 = beta * sindphi
+        m21 = -gamma * sindphi
+        m22 = cosdphi - alpha * sindphi
+        self._x, self._px = m11*self._x+m12*self._px , m21*self._x+m22*self._px
+
+        
 
     def one_turn_y(self):
         self._y, self._py=self.param.IPmap[2:4,2:4].dot(np.array([self._y, self._py]))
 
+    def one_turn_y_chromatic(self, chrom):
+        dphi = self._dE*chrom*2*np.pi
+        beta = self.param.beta_IP[1]
+        alpha = self.param.alpha_IP[1]
+        gamma = self.param.gamma_IP[1]
+        cosdphi=np.cos(dphi)
+        sindphi=np.sin(dphi)
+        m11 = cosdphi + alpha * sindphi
+        m12 = beta * sindphi
+        m21 = -gamma * sindphi
+        m22 = cosdphi - alpha * sindphi
+        self._y, self._py = m11*self._y+m12*self._py , m21*self._y+m22*self._py
 
     def one_turn_z(self):
         self._ct, self._dE=self.param.IPmap[4:,4:].dot(np.array([self._ct, self._dE]))
 
+    def one_turn_z_RF(self):
+        ztphi=2*np.pi*self.param.rf_freq/const.c
+        sinphi=np.sin(self.param.rf_phase)
+        c1=self.param.rf_voltage/self.param.energy/self.param.beta**2
+        c2=2*np.pi*self.param.rf_harm*self.param.rf_eta/ztphi
+
+        self._dE+=c1*(np.sin(ztphi*self._ct+self.param.rf_phase)-sinphi)
+        self._ct+=c2*self._dE
 
     def plot_distribution(self, axis, xy=('x','px'), units=('[mm]', '[mrad]'), scale=(1.0, 1.0), bins=400, range=None, zrange=None,
                           draw_emit_ellipse=False, threshold=0.001, location=0, alpha=0.9, cmap=None, norm=None):
@@ -237,7 +307,7 @@ class Beam(object):
         from matplotlib.patches import Ellipse
         from matplotlib.colors import LogNorm
 
-        if location is not 0:
+        if location != 0:
             #self.drift(location)
             self._ct += location
         h, xedge, yedge, = np.histogram2d(self.__dict__['_' + xy[1]]*scale[1], self.__dict__['_' + xy[0]]*scale[0],
@@ -267,7 +337,7 @@ class Beam(object):
             cmap.set_bad(color='white')
             h=np.ma.masked_where(h <= threshold, h, copy=False)
 
-        image = axis.imshow(h, interpolation='nearest', origin='low', extent=[yedge[0], yedge[-1], xedge[0], xedge[-1]],
+        image = axis.imshow(h, interpolation='nearest', origin='lower', extent=[yedge[0], yedge[-1], xedge[0], xedge[-1]],
                             aspect='auto', cmap=cmap, vmin=minz, vmax=maxz,alpha=alpha, norm=norm)
         # axis.scatter(self.__dict__['_'+xy[0]]*1.0e3,self.__dict__['_'+xy[1]]*1.0e3)
         axis.set_xlabel(xy[0] + ' ' + units[0])
@@ -303,7 +373,7 @@ class Beam(object):
             axis.add_patch(ep)
             axis.add_patch(ee)
             '''
-        if location is not 0:
+        if location != 0:
             #self.drift(-location)
             self._ct -= location
         return image
@@ -332,16 +402,24 @@ class Beam(object):
 
     def SR_damping_excitation(self):
         if self.param.damping_decrement.any():
+            size= len(self._x)
             exp_damp= np.exp(-self.param.damping_decrement)
             sqrt_exp_damp=np.sqrt(1.0-exp_damp*exp_damp)
-            self._x = self._x * exp_damp[0] + np.random.randn() * sqrt_exp_damp[0] * self.param.rms_beamsize[0]
-            self._px = self._px * exp_damp[0] + np.random.randn() * sqrt_exp_damp[0] * self.param.rms_beamsize[0]/self.param.beta_IP[0]
+            self._x *= exp_damp[0]
+            self._px *= exp_damp[0]
+            self._y *= exp_damp[1]
+            self._py *= exp_damp[1]
+            self._ct *= exp_damp[2]
+            self._dE *= exp_damp[2]
 
-            self._y = self._y * exp_damp[1] + np.random.randn() * sqrt_exp_damp[1] * self.param.rms_beamsize[1]
-            self._py = self._py * exp_damp[1] + np.random.randn() * sqrt_exp_damp[1] * self.param.rms_beamsize[1]/self.param.beta_IP[1]
+            self._x += np.random.randn(size) * (sqrt_exp_damp[0] * self.param.rms_beamsize[0])
+            self._px += np.random.randn(size) * (sqrt_exp_damp[0] * self.param.rms_beamsize[0]/self.param.beta_IP[0])
 
-            self._ct = self._ct * exp_damp[2] + np.random.randn() * sqrt_exp_damp[2] * self.param.rms_beamsize[2]
-            self._dE = self._dE * exp_damp[2] + np.random.randn() * sqrt_exp_damp[2] * self.param.rms_energy_spread
+            self._y += np.random.randn(size) * (sqrt_exp_damp[1] * self.param.rms_beamsize[1])
+            self._py += np.random.randn(size) * (sqrt_exp_damp[1] * self.param.rms_beamsize[1]/self.param.beta_IP[1])
+
+            self._ct += np.random.randn(size) * (sqrt_exp_damp[2] * self.param.rms_beamsize[2])
+            self._dE += np.random.randn(size) * (sqrt_exp_damp[2] * self.param.rms_energy_spread)
 
     def zslicing(self, from_distribution=False, even_z=True):
 
@@ -857,24 +935,71 @@ class Beam(object):
         lumi = lumi*self.param.n_particle/self.param.n_macro*freq*nbunch/1.0e4
         return lumi
    
-    def initialize_distribution(self, dim=6):
+    def mirror_copy_distribution(self):
+        self._x = np.append(self._x, -self._x)
+        self._y = np.append(self._y, self._y)
+        self._px = np.append(self._px, self._px)
+        self._py = np.append(self._py, self._py)
+        self._ct = np.append(self._ct, self._ct)
+        self._dE = np.append(self._dE, self._dE)
+        self.param.n_macro = self.param.n_macro*2
+
+        self._x = np.append(self._x, self._x)
+        self._y = np.append(self._y, -self._y)
+        self._px = np.append(self._px, self._px)
+        self._py = np.append(self._py, self._py)
+        self._ct = np.append(self._ct, self._ct)
+        self._dE = np.append(self._dE, self._dE)
+        self.param.n_macro = self.param.n_macro*2
+
+        self._x = np.append(self._x, self._x)
+        self._y = np.append(self._y, self._y)
+        self._px = np.append(self._px, -self._px)
+        self._py = np.append(self._py, self._py)
+        self._ct = np.append(self._ct, self._ct)
+        self._dE = np.append(self._dE, self._dE)
+        self.param.n_macro = self.param.n_macro*2
+
+        self._x = np.append(self._x, self._x)
+        self._y = np.append(self._y, self._y)
+        self._px = np.append(self._px, self._px)
+        self._py = np.append(self._py, -self._py)
+        self._ct = np.append(self._ct, self._ct)
+        self._dE = np.append(self._dE, self._dE)
+        self.param.n_macro = self.param.n_macro*2
+
+        self._x = np.append(self._x, self._x)
+        self._y = np.append(self._y, self._y)
+        self._px = np.append(self._px, self._px)
+        self._py = np.append(self._py, self._py)
+        self._ct = np.append(self._ct, -self._ct)
+        self._dE = np.append(self._dE, self._dE)
+        self.param.n_macro = self.param.n_macro*2
+        
+
+    def initialize_distribution(self, dim=6, seed=None, mirror=False):
+
+        if seed is not None:
+            np.random.seed(seed)
+
         if self._ndim<dim:
             self._ndim=dim
         if self.param.n_macro==0:
             print("Warning, zero macro particle requested")
 
+
         moment_mat=np.eye(dim)
         dis=[]
         if dim >= 2:
-            self._x = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro)) #*self.param.initial_beamsize[0]
-            self._px = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro)) #*self.param.initial_beamsize[0]/self.param.beam_beta[0]
+            self._x[:] = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro)) #*self.param.initial_beamsize[0]
+            self._px[:] = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro)) #*self.param.initial_beamsize[0]/self.param.beam_beta[0]
             #element.thin_quad_2d(self._x,self._px,self.param.beam_alpha[0]/self.param.beam_beta[0])
             moment_mat[0,1]=np.mean(self._x*self._px)
             dis.append(self._x)
             dis.append(self._px)
         if dim >= 4:
-            self._y = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))   #*self.param.initial_beamsize[1]
-            self._py = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))   #*self.param.initial_beamsize[1]/self.param.beam_beta[1]
+            self._y[:] = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))   #*self.param.initial_beamsize[1]
+            self._py[:] = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))   #*self.param.initial_beamsize[1]/self.param.beam_beta[1]
             #element.thin_quad_2d(self._y,self._py,self.param.beam_alpha[1]/self.param.beam_beta[1])
             moment_mat[0, 2] = np.mean(self._x * self._y)
             moment_mat[0, 3] = np.mean(self._x * self._py)
@@ -884,8 +1009,8 @@ class Beam(object):
             dis.append(self._y)
             dis.append(self._py)
         if dim >= 6:
-            self._ct = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))    #*self.param.initial_beamsize[2]
-            self._dE = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))      #*self.param.initial_energy_spread
+            self._ct[:] = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))    #*self.param.initial_beamsize[2]
+            self._dE[:] = lf.randn_cutoff(self.param.gaussian_cutoff, int(self.param.n_macro))      #*self.param.initial_energy_spread
             moment_mat[0, 4] = np.mean(self._x * self._ct)
             moment_mat[0, 5] = np.mean(self._x * self._dE)
             moment_mat[1, 4] = np.mean(self._px * self._ct)
@@ -903,12 +1028,12 @@ class Beam(object):
         evl, ev = np.linalg.eig(moment_mat)
         vec = ev @ np.diag(1 / np.sqrt(evl)) @ ev.transpose()
         if dim==2:
-            self._x, self._px = vec.dot(np.array(dis))
+            self._x[:], self._px[:] = vec.dot(np.array(dis))
             self._x *= self.param.initial_beamsize[0]
             self._px *= self.param.initial_beamsize[0] / self.param.beam_beta[0]
             element.thin_quad_2d(self._x,self._px,self.param.beam_alpha[0]/self.param.beam_beta[0])
         elif dim==4:
-            self._x, self._px, self._y, self._py=vec.dot(np.array(dis))
+            self._x[:], self._px[:], self._y[:], self._py[:]=vec.dot(np.array(dis))
             self._x *= self.param.initial_beamsize[0]
             self._px *= self.param.initial_beamsize[0] / self.param.beam_beta[0]
             self._y *= self.param.initial_beamsize[1]
@@ -916,7 +1041,7 @@ class Beam(object):
             element.thin_quad_2d(self._x, self._px, self.param.beam_alpha[0] / self.param.beam_beta[0])
             element.thin_quad_2d(self._y, self._py, self.param.beam_alpha[1] / self.param.beam_beta[1])
         elif dim==6:
-            self._x, self._px, self._y, self._py, self._ct, self._dE = vec.dot(np.array(dis))
+            self._x[:], self._px[:], self._y[:], self._py[:], self._ct[:], self._dE[:] = vec.dot(np.array(dis))
             self._x *= self.param.initial_beamsize[0]
             self._px *= self.param.initial_beamsize[0] / self.param.beam_beta[0]
             self._y *= self.param.initial_beamsize[1]
@@ -925,6 +1050,22 @@ class Beam(object):
             self._dE *= self.param.initial_energy_spread
             element.thin_quad_2d(self._x, self._px, self.param.beam_alpha[0] / self.param.beam_beta[0])
             element.thin_quad_2d(self._y, self._py, self.param.beam_alpha[1] / self.param.beam_beta[1])
+            if self.param.rf_voltage!=0:
+                for i in range(int(3/self.param.tune[-1])):
+                    self.one_turn_z_RF()
+                ztphi = 2 * np.pi * self.param.rf_freq / const.c
+                maxphase=np.abs(self.param.rf_unstable_phase-self.param.rf_phase)
+                mask=np.abs(self._ct*ztphi)>np.abs(self.param.rf_unstable_phase-self.param.rf_phase)
+                self._ct[mask]=np.mod(np.abs(self._ct[mask]*ztphi), maxphase)/ztphi
+                if self.param.rf_phase > np.pi/2:
+                    self._ct[mask]*=-1
+                self._dE[mask]=0.0
+                for i in range(int(5/self.param.tune[-1])):
+                    self.one_turn_z_RF()
+
+        if mirror is True:
+            self.mirror_copy_distribution()
+
 
 
 if __name__=='__main__':
