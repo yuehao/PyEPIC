@@ -952,6 +952,7 @@ class Beam(object):
             self._ct = np.append(self._ct, self._ct)
             self._dE = np.append(self._dE, self._dE)
             self.param.n_macro = self.param.n_macro*2
+
         if dimlim<=4:
             self._x = np.append(self._x, self._x)
             self._y = np.append(self._y, -self._y)
@@ -989,7 +990,7 @@ class Beam(object):
        
         
 
-    def initialize_distribution(self, dim=6, seed=None, mirror=False):
+    def initialize_distribution(self, dim=6, seed=None, mirror=False, dimlim=6):
 
         if seed is not None:
             np.random.seed(seed)
@@ -1076,7 +1077,7 @@ class Beam(object):
                     self.one_turn_z_RF()
 
         if mirror is True:
-            self.mirror_copy_distribution()
+            self.mirror_copy_distribution(dimlim)
 
 
 
