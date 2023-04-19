@@ -935,8 +935,8 @@ class Beam(object):
         lumi = lumi*self.param.n_particle/self.param.n_macro*freq*nbunch/1.0e4
         return lumi
    
-    def mirror_copy_distribution(self, dim=6):
-        if dim <= 2:
+    def mirror_copy_distribution(self, dimlim=6):
+        if dimlim <= 2:
             self._x = np.append(self._x, -self._x)
             self._y = np.append(self._y, self._y)
             self._px = np.append(self._px, self._px)
@@ -952,7 +952,7 @@ class Beam(object):
             self._ct = np.append(self._ct, self._ct)
             self._dE = np.append(self._dE, self._dE)
             self.param.n_macro = self.param.n_macro*2
-        if dim<=4:
+        if dimlim<=4:
             self._x = np.append(self._x, self._x)
             self._y = np.append(self._y, -self._y)
             self._px = np.append(self._px, self._px)
@@ -969,7 +969,7 @@ class Beam(object):
             self._dE = np.append(self._dE, self._dE)
             self.param.n_macro = self.param.n_macro*2
 
-        if dim<=6:
+        if dimlim<=6:
             self._x = np.append(self._x, self._x)
             self._y = np.append(self._y, self._y)
             self._px = np.append(self._px, self._px)
