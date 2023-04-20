@@ -195,21 +195,7 @@ class Beam(object):
         self.param.set_param(**input_dict)
 
         self.param.n_macro=(self.param.n_macro//self.nproc)*self.nproc
-        nmp = int(self.param.n_macro)
-
-        self._XRAW = RawArray('d', nmp)
-        self._PXRAW = RawArray('d', nmp)
-        self._YRAW = RawArray('d', nmp)
-        self._PYRAW = RawArray('d', nmp)
-        self._CTRAW = RawArray('d', nmp)
-        self._DERAW = RawArray('d', nmp)
-
-        self._x=np.frombuffer(self._XRAW)
-        self._px=np.frombuffer(self._PXRAW)
-        self._y = np.frombuffer(self._YRAW)
-        self._py = np.frombuffer(self._PYRAW)
-        self._ct = np.frombuffer(self._CTRAW)
-        self._dE = np.frombuffer(self._DERAW)
+        
 
 
     def get_optics(self, loc):
@@ -1001,6 +987,21 @@ class Beam(object):
         if self.param.n_macro==0:
             print("Warning, zero macro particle requested")
 
+        nmp = int(self.param.n_macro)
+
+        self._XRAW = RawArray('d', nmp)
+        self._PXRAW = RawArray('d', nmp)
+        self._YRAW = RawArray('d', nmp)
+        self._PYRAW = RawArray('d', nmp)
+        self._CTRAW = RawArray('d', nmp)
+        self._DERAW = RawArray('d', nmp)
+
+        self._x =np.frombuffer(self._XRAW)
+        self._px =np.frombuffer(self._PXRAW)
+        self._y = np.frombuffer(self._YRAW)
+        self._py = np.frombuffer(self._PYRAW)
+        self._ct = np.frombuffer(self._CTRAW)
+        self._dE = np.frombuffer(self._DERAW)
 
         moment_mat=np.eye(dim)
         dis=[]
