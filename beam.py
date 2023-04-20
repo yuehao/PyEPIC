@@ -191,7 +191,7 @@ class Beam(object):
         self.nproc=nproc
 
     def read_input(self, input_dict):
-        from multiprocessing.sharedctypes import RawArray
+        
         self.param.set_param(**input_dict)
 
         self.param.n_macro=(self.param.n_macro//self.nproc)*self.nproc
@@ -978,7 +978,7 @@ class Beam(object):
         
 
     def initialize_distribution(self, dim=6, seed=None, mirror=False, dimlim=6):
-
+        from multiprocessing.sharedctypes import RawArray
         if seed is not None:
             np.random.seed(seed)
 
